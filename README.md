@@ -1,3 +1,3 @@
 # StandupSense-
 AI Chief of Staff for small teams — pulls real Notion and GitHub  activity, detects blockers deterministically, and uses IBM Granite  to surface the one decision your team actually needs to make today.
-IBM Granite models and IBM BOb designed this. 
+IBM Granite models ibm/granite-3-2b-instruct and IBM BOb designed this. 
