@@ -1,0 +1,28 @@
+# ─── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+
+# ─── Next.js build output ─────────────────────────────────────────────────────
+.next/
+out/
+
+# ─── Environment variables — NEVER commit these ───────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ─── Activity cache — runtime data, not source ────────────────────────────────
+cache/last-run.json
+
+# ─── TypeScript build info ────────────────────────────────────────────────────
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# ─── OS / editor junk ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*

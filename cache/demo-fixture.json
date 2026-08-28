@@ -1,0 +1,99 @@
+{
+  "activities": [
+    {
+      "id": "notion-task-001",
+      "source": "notion",
+      "kind": "task",
+      "title": "Payment integration — Stripe checkout flow",
+      "status": "in_progress",
+      "owner": "alice",
+      "createdAt": "2024-11-01T09:00:00.000Z",
+      "lastUpdatedAt": "2024-11-04T14:30:00.000Z",
+      "dueDate": "2024-11-08T23:59:00.000Z",
+      "url": "#",
+      "openQuestions": [],
+      "dependsOn": [],
+      "rawTags": ["backend", "payments"]
+    },
+    {
+      "id": "notion-task-002",
+      "source": "notion",
+      "kind": "task",
+      "title": "Design system tokens — update brand colours",
+      "status": "in_progress",
+      "owner": "carol",
+      "createdAt": "2024-10-28T10:00:00.000Z",
+      "lastUpdatedAt": "2024-10-31T16:00:00.000Z",
+      "dueDate": "2024-11-06T23:59:00.000Z",
+      "url": "#",
+      "openQuestions": [
+        "Should we go with IBM Carbon tokens or define our own design system?"
+      ],
+      "dependsOn": [],
+      "rawTags": ["design", "frontend"]
+    },
+    {
+      "id": "notion-task-003",
+      "source": "notion",
+      "kind": "task",
+      "title": "Auth refactor — migrate to NextAuth v5",
+      "status": "in_progress",
+      "owner": "bob",
+      "createdAt": "2024-10-25T09:00:00.000Z",
+      "lastUpdatedAt": "2024-10-28T11:00:00.000Z",
+      "dueDate": null,
+      "url": "#",
+      "openQuestions": [],
+      "dependsOn": ["notion-task-002"],
+      "rawTags": ["auth", "backend"]
+    },
+    {
+      "id": "42",
+      "source": "github",
+      "kind": "pull_request",
+      "title": "feat: Add Stripe webhook handler",
+      "status": "in_progress",
+      "owner": "alice",
+      "createdAt": "2024-11-03T08:00:00.000Z",
+      "lastUpdatedAt": "2024-11-03T08:00:00.000Z",
+      "dueDate": null,
+      "url": "#",
+      "openQuestions": [
+        "Should we use Stripe or Paddle for this integration? Paddle has better EU tax handling."
+      ],
+      "dependsOn": [],
+      "rawTags": ["payments", "webhook"]
+    },
+    {
+      "id": "39",
+      "source": "github",
+      "kind": "pull_request",
+      "title": "refactor: Extract auth middleware into shared package",
+      "status": "blocked",
+      "owner": "bob",
+      "createdAt": "2024-10-30T14:00:00.000Z",
+      "lastUpdatedAt": "2024-10-31T10:00:00.000Z",
+      "dueDate": null,
+      "url": "#",
+      "openQuestions": [],
+      "dependsOn": [],
+      "rawTags": ["auth", "refactor"]
+    },
+    {
+      "id": "branch:feature/old-experiment-cache",
+      "source": "github",
+      "kind": "branch",
+      "title": "feature/old-experiment-cache",
+      "status": "in_progress",
+      "owner": "dave",
+      "createdAt": "2024-10-20T09:00:00.000Z",
+      "lastUpdatedAt": "2024-10-20T09:00:00.000Z",
+      "dueDate": null,
+      "url": "#",
+      "openQuestions": [],
+      "dependsOn": [],
+      "rawTags": []
+    }
+  ],
+  "_standupNotes": "Alice: Payment integration is basically done, just finishing up tests.\nBob: Auth refactor is going well, PR is up and almost ready to merge.\nCarol: Design tokens are sorted, should be done today.\n\nNote: This fixture intentionally contradicts the data — the point is for StandupSense to surface the gap."
+}
