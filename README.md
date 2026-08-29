@@ -1,215 +1,162 @@
 # StandupSense
 
 **IBM AI Builders Challenge — Wild Card Theme: AI Co-workers / Workflow Orchestration / Decision Intelligence**
+# StandupSense
+
+**Honest team status, powered by real data — not standup optimism.**
+
+Built with IBM Bob for the IBM AI Builders Challenge — Wild Card Theme.
 
 ---
 
-## The Problem
+## Problem Statement
 
-Small teams run daily or weekly standups where status updates are often optimistic fiction. Blockers go unspoken. Decisions get raised in threads, never resolved, and quietly block progress for days. Nobody has a Chief of Staff to catch this.
+Small teams and startups run daily or weekly standups where status updates are often optimistic rather than accurate. A task marked "basically done" might not have moved in days. A decision that needs to be made can sit unresolved in a pull request comment for a week without anyone noticing. Nobody catches this gap — large companies have a Chief of Staff or Operations team to track it; small teams have nothing.
 
-The result: a PR sits unreviewed for 72 hours while the standup says "nearly done." A task has been "in progress" for a week with no commits. A design decision is buried in a PR comment with no reply.
+The result: talented people doing important work, falling behind not because of skill, but because of coordination blind spots that nobody is actively watching.
 
----
+## Solution Description
 
-## The Solution
+StandupSense is an AI Chief of Staff for small teams. It connects directly to **Notion** (tasks) and **GitHub** (pull requests, code activity) — not self-reported status — and:
 
-StandupSense is a single-workflow AI agent that:
-
-1. **Pulls real activity data** from Notion (task status, due dates, last-edited timestamps) and GitHub (open PRs, review status, commit activity, stale branches)
-2. **Cross-references that data** against what the team said in their last standup notes
-3. **Detects blockers automatically** using deterministic rules — stale tasks, unreviewed PRs, stuck branches, overdue items, open dependencies
-4. **Generates an honest Situation Brief** — a short, accurate summary of real progress vs. reported progress
-5. **Surfaces the single most important unresolved decision** blocking the team right now, with context, so it can be resolved in one sitting
-
----
+1. Detects real blockers using deterministic rules (overdue tasks, stale pull requests, unresolved dependencies)
+2. Optionally compares this against a team's own standup notes to surface the gap between what was *reported* and what the data *shows*
+3. Uses **IBM Granite** to write a plain-language summary and highlight the single most important decision the team needs to resolve today
+4. Surfaces everything in a clean dashboard — including a direct link back to the real Notion task or GitHub PR behind every risk
 
 ## AI Approach and Architecture
 
-### Deterministic blocker detection (no AI)
-Eight rule-based checks run first, before any LLM call:
-
-| Rule | Trigger |
-|---|---|
-| STALE_TASK | Notion task "in progress" with no update in 3+ days |
-| AT_RISK_DUE | Task due within 2 days and not done |
-| PAST_DUE | Task past its due date |
-| OPEN_DEPENDENCY | Task blocked by an incomplete dependency |
-| NO_PR_REVIEW | PR open 48+ hours with no review |
-| PR_STUCK | PR with changes requested, no new commits in 48h |
-| STALE_BRANCH | Branch with no commits in 7+ days |
-| CROSS_SYSTEM_MISMATCH | Notion task references GitHub work but no matching PR exists |
-
-This makes the demo reliable and the logic auditable — the same input always produces the same detection result.
-
-### IBM Granite (via watsonx)
-Granite receives the standup notes and blocker list as context and generates two free-text fields:
-- **summary** — a 3–4 sentence honest assessment of where the team stands
-- **reportedVsReal** — one paragraph on the gap between stated progress and actual data
-
-Prompt: system prompt instructs Granite to act as a sharp, calm chief of staff. No filler language. Cite specific task names and PR numbers.
-
-### Narrative source tracking
-Three fallback paths, each surfaced in the UI:
-1. **IBM Granite** (`narrativeSource: "granite"`) — primary
-2. **OpenAI gpt-4o-mini** (`narrativeSource: "openai"`) — if `OPENAI_API_KEY` is set and Granite is unavailable
-3. **Rule-based templates** (`narrativeSource: "rule-based"`) — if both LLMs fail; the brief still renders, `fallbackUsed: true`
-
-**Pipeline architecture:**
+StandupSense is built around one deliberate design decision: **blocker detection is deterministic, AI narration is separate.**
 
 ```
-Standup notes (text input)
-        │
-        ▼
-┌─────────────────────────────────────────────┐
-│              LangChain Pipeline             │
-│                                             │
-│  Notion Fetcher → GitHub Fetcher            │
-│         │               │                  │
-│         └────────┬───────┘                  │
-│                  ▼                          │
-│         Data Normalizer (NormalizedActivity[])│
-│                  │                          │
-│                  ▼                          │
-│         Blocker Detector (deterministic)    │
-│                  │                          │
-│                  ▼                          │
-│         Granite Narrative Generator        │
-│         (summary + reportedVsReal only)     │
-│                  │                          │
-│                  ▼                          │
-│         BriefOutput assembly (chain.ts)     │
-└─────────────────────────────────────────────┘
-        │
-        ▼
-  Next.js Dashboard (App Router)
+Notion Fetcher ──┐
+                 ├──▶ Normalizer ──▶ Blocker Detector ──▶ chain.ts assembly ──▶ BriefOutput
+GitHub Fetcher ──┘         │            (rule-based,           │
+                            │             no AI)                │
+                            │                                   │
+                     Standup Notes ──────────▶ Granite Reasoning ┘
+                     (optional)              (summary +
+                                              reportedVsReal
+                                              ONLY)
 ```
 
-**Key design decision:** IBM Granite is given the blockers as read-only context and asked to write exactly two things — a summary and a reported-vs-reality gap analysis. It does not regenerate the blocker list or decision object. Those come from the deterministic detector, which means `url`, `activityId`, and source fields are always accurate and always link back to real items.
+**Why this separation matters:** the AI never generates the list of risks or the flagged decision — those come exclusively from deterministic rules run against real Notion and GitHub data (overdue dates, stale PRs, missing reviews, open dependencies). IBM Granite's only responsibility is writing two pieces of plain-language narrative on top of facts that are already established: a summary, and a comparison between reported status and actual data. This means the system can never hallucinate a blocker that doesn't exist — the AI is the narrator, not the source of truth.
 
----
+**Reliability chain:** every brief generation attempts IBM Granite first, falls back to an alternate model if Granite is unavailable, and falls back again to a rule-based template if both AI paths fail — so a usable brief is always produced, even during an API outage.
 
-## Challenge Theme
+### Blocker Detection Rules
 
-**Wild Card — AI Co-workers / Workflow Orchestration / Decision Intelligence**
+| Rule | Source | Trigger | Severity |
+|---|---|---|---|
+| `STALE_TASK` | Notion | In progress, not updated in 3+ days | Medium |
+| `AT_RISK_DUE` | Notion | Due within 2 days, not done | High |
+| `PAST_DUE` | Notion | Due date passed, not done | High |
+| `OPEN_DEPENDENCY` | Notion | Blocked by an incomplete dependency | High |
+| `NO_PR_REVIEW` | GitHub | PR open 48+ hours, no review | Medium |
+| `PR_STUCK` | GitHub | Changes requested, no new commits in 48h | High |
+| `STALE_BRANCH` | GitHub | No commits in 7+ days, not merged | Low |
+| `CROSS_SYSTEM_MISMATCH` | Both | Notion task references GitHub work with no matching PR | Medium |
 
-StandupSense acts as an AI co-worker that does the job a good Chief of Staff would do: cross-referencing self-reported status with real system data, detecting what's actually blocked, and surfacing the one decision that needs to happen today. It orchestrates two external data sources through a LangChain pipeline, uses IBM Granite for reasoning, and produces a structured brief that replaces the optimistic fiction of a typical standup.
+## Selected Challenge Theme
 
----
+**Wild Card Theme** — AI co-workers, workflow orchestration, and decision intelligence.
 
 ## How IBM Bob Was Used
 
-IBM Bob (the AI assistant) was used throughout the entire development of this project:
+This project was built end-to-end with IBM Bob, across its full development lifecycle:
 
-1. **Planning the architecture** — Bob produced the full system architecture diagram, file structure, normalized data schema, and the list of required API endpoints with correct scopes (including catching `repo:read` as a non-existent GitHub scope and the missing Notion comments endpoint)
-2. **Generating the data fetchers** — Bob wrote `notionFetcher.ts` and `githubFetcher.ts` with pagination, error handling, both Notion comment sources, and both GitHub comment endpoints (inline review + general discussion)
-3. **Building the blocker detector** — Bob implemented all 8 detection rules as deterministic named functions with severity ranking and deduplication
-4. **Designing the AI integration** — Bob identified the design flaw in asking Granite to regenerate structured fields it shouldn't own, and restructured `graniteClient.ts` so Granite only writes narrative while the detector owns all structured data
-5. **Building the IAM token manager** — Bob designed the in-memory cache + 60-second pre-expiry refresh to prevent silent 401 failures mid-demo
-6. **Building the frontend** — Bob wrote all five React components and the main page with loading skeletons, severity color-coding, and the amber `DecisionSurface` callout
-7. **Writing this README** — Bob generated this document
+- **Plan mode** — architecting the pipeline, defining the normalized data schema shared between Notion and GitHub, and identifying the highest-risk technical unknowns before writing any code
+- **Code mode** — implementing both API fetchers, the deterministic blocker-detection engine, the IAM token manager for watsonx authentication, the Granite client with its fallback chain, the LangChain orchestration, and the full frontend dashboard
+- **Iterative debugging** — Bob added structured logging throughout the pipeline (fetch counts per source, Granite/watsonx error details, IAM token lifecycle) that made it possible to diagnose and fix a series of real integration issues during development: an incorrectly formatted watsonx project ID, a missing service association between the project and its inference runtime, and an outdated model ID — each identified precisely from logs Bob added, not guessed at
+- **Ask mode** — generating and refining this README
 
----
+## Tech Stack
 
-## Setup
+- **Frontend:** Next.js (App Router) + React + Tailwind CSS
+- **AI:** IBM Granite (`ibm/granite-4-h-small`) via watsonx.ai Runtime
+- **Orchestration:** LangChain (`RunnableSequence`)
+- **Data sources:** Notion API, GitHub REST API (via Octokit)
+- **Dev environment:** IBM Bob
 
-### Prerequisites
-- Node.js 18+
-- A Notion workspace with an Internal Integration
-- A GitHub Personal Access Token
-- An IBM Cloud account with a watsonx project
+## Demo Scenario
+
+To demonstrate StandupSense with realistic data, this project is connected to a sample team working on a website redesign, tracked across Notion (tasks) and GitHub (code).
+
+**Sample standup notes used:**
+```
+Payment integration / checkout is basically done, just polishing.
+Website redesign is moving along fine, should wrap up soon.
+No blockers to flag today.
+```
+
+**What the connected data actually shows:**
+- The website redesign task is overdue and still marked "in progress"
+- An unresolved decision — whether to use Stripe or Paddle for payments — is sitting in an open, unmerged pull request, never mentioned in standup
+
+**What StandupSense surfaces:** a clear, plain-language gap analysis identifying both issues, plus a direct link back to the real GitHub PR containing the unresolved decision.
+
+## Setup Instructions
 
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/your-org/standupsense
+git clone <this-repo-url>
 cd standupsense
 npm install
 ```
 
-### 2. Configure environment variables
+### 2. Notion setup
 
-```bash
-cp .env.example .env.local
+1. Create an Internal Integration at `notion.so/my-integrations` (now labeled "Connections")
+2. Enable both **Read content** and **Read comments** capabilities
+3. Share your target database with the integration (database `•••` menu → Connections)
+4. Copy your database ID from its URL
+
+### 3. GitHub setup
+
+Generate a **classic PAT** with `repo` scope (private repos) or `public_repo` scope (public repos), or a **fine-grained PAT** with `Contents: Read-only` + `Pull requests: Read-only` permissions.
+
+### 4. watsonx setup
+
+1. Create a project at `dataplatform.cloud.ibm.com`
+2. Associate a **watsonx.ai Runtime** service instance with your project (Manage → Services & integrations → Associate service) — this step is required and easy to miss; a project without this returns a `403` error on every Granite call
+3. Generate an API key at `cloud.ibm.com/iam/apikeys`
+4. Confirm your available model ID via Prompt Lab or the `foundation_model_specs` endpoint — model availability varies by account and region
+
+### 5. Environment variables
+
+Copy `.env.example` to `.env.local` and fill in:
+
 ```
-
-Edit `.env.local`:
-
-```env
-# Notion
-NOTION_TOKEN=secret_...           # From https://notion.so/my-integrations
-NOTION_DATABASE_ID=...            # From your database URL
-NOTION_STATUS_PROP=Status         # Exact property name in your DB
-NOTION_DUE_DATE_PROP=Due Date
+NOTION_TOKEN=
+NOTION_DATABASE_ID=
+NOTION_STATUS_PROP=Status
+NOTION_DUE_DATE_PROP=Due date
 NOTION_ASSIGNEE_PROP=Assignee
 
-# GitHub
-# Classic PAT: needs "repo" (private repo) or "public_repo" (public repo)
-# Fine-grained PAT: needs "Contents: Read-only" + "Pull requests: Read-only"
-# NOTE: "repo:read" does NOT exist as a classic PAT scope
-GITHUB_TOKEN=ghp_...
-GITHUB_OWNER=your-org
-GITHUB_REPO=your-repo
+GITHUB_TOKEN=
+GITHUB_OWNER=
+GITHUB_REPO=
 
-# IBM watsonx
-# Verify your model: GET /ml/v1/foundation_model_specs?version=2023-05-29
-WATSONX_API_KEY=...
-WATSONX_PROJECT_ID=...
+WATSONX_API_KEY=
+WATSONX_PROJECT_ID=
 WATSONX_URL=https://us-south.ml.cloud.ibm.com
-WATSONX_MODEL_ID=ibm/granite-3-2b-instruct
+WATSONX_MODEL_ID=ibm/granite-4-h-small
+
+DEMO_MODE=false
 ```
 
-**Notion integration setup:**
-1. Go to [notion.so/my-integrations](https://notion.so/my-integrations)
-2. Create an Internal Integration
-3. Enable **Read content** AND **Read comments** capabilities (the comments endpoint returns 403 without this)
-4. Share your task database with the integration
-
-### 3. Run in demo mode (no live API calls needed)
-
-```bash
-DEMO_MODE=true npm run dev
-```
-
-Open [localhost:3000](http://localhost:3000), paste the sample standup notes from `cache/demo-fixture.json`'s `_standupNotes` field, and click Generate Brief.
-
-### 4. Run with live data
+### 6. Run
 
 ```bash
 npm run dev
 ```
 
-### 5. Test the fetchers
-
-```bash
-# With live credentials:
-npx ts-node --project tsconfig.json scripts/testFetchers.ts
-
-# With demo fixture:
-DEMO_MODE=true npx ts-node --project tsconfig.json scripts/testFetchers.ts
-```
-
----
+Open `http://localhost:3000`, paste in standup notes (optional), and click **Generate brief**.
 
 ## What's Next
 
-These features are scoped out of the MVP intentionally and are the natural next extensions:
+- **Slack integration** — surface decisions and blockers from team chat, not just PRs and tasks
+- **Gmail integration** — detect unanswered client emails and stale external threads as a third blocker source, extending the same deterministic-detection-plus-AI-narrative architecture to unstructured communication data
+- **Multi-team support** — currently scoped to a single workspace; next step is per-team configuration
 
-- **Slack integration** — pull standup notes directly from a Slack channel instead of manual text input; post the brief back to the channel automatically
-- **Email digest** — send the Situation Brief as a daily email to team leads
-- **Multi-team support** — connect multiple Notion databases and GitHub repos under a single workspace, with per-team briefs
-- **Decision log** — track surfaced decisions over time so the team can see what was resolved and what was deferred
-- **Persistent storage** — store briefs in a database so the team can review history and track whether blockers were resolved
-- **Automated scheduling** — run the pipeline on a schedule (daily at 9am) rather than requiring a manual trigger
-
----
-
-## Pre-Submission Checklist
-
-- [ ] IBM SkillsBuild learning activity completed
-- [ ] GitHub repository set to Public (not Private) — [github.com/shabanakausar/StandupSense-](https://github.com/shabanakausar/StandupSense-)
-- [ ] Demo video recorded (≤3 minutes) and publicly accessible
-- [ ] Submission page published with team details + GitHub link + video link
-- [ ] Notion test data reseeded with realistic near-term dates (not the original 600+ day placeholder values)
-- [ ] Confirmed GitHub fetcher returns real PR/branch data (run with live credentials and check `[fetch] github:` log line — should be > 0)
-- [ ] Confirmed which narrative source (Granite/OpenAI/rule-based) is actually firing — check server logs for `[graniteClient]` lines after next run
